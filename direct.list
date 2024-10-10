@@ -17,3 +17,31 @@ DOMAIN-SUFFIX,fjtv.net
 DOMAIN-SUFFIX,wslivehls.com
 DOMAIN-SUFFIX,cztv.com
 DOMAIN-SUFFIX,btime.com
+
+; bili
+DOMAIN-SUFFIX,bilibili.com
+DOMAIN-SUFFIX,biliapi.net
+DOMAIN-SUFFIX,biliapi.com
+DOMAIN-SUFFIX,im9.com
+DOMAIN-SUFFIX,acg.tv
+DOMAIN-SUFFIX,biligame.com
+DOMAIN-SUFFIX,bilibili.tv
+
+DOMAIN-SUFFIX,weixin.qq.com
+DOMAIN-SUFFIX,huya.com
+DOMAIN-SUFFIX,webank.com
+DOMAIN-SUFFIX,douban.com
+DOMAIN-SUFFIX,xiaohongshu.com
+DOMAIN-KEYWORD,weibo
+
+; netease
+DOMAIN-SUFFIX,netease.com
+DOMAIN-SUFFIX,163.com
+DOMAIN-SUFFIX,126.com
+DOMAIN-SUFFIX,127.net
+DOMAIN-SUFFIX,laiqukankan.com
+DOMAIN-SUFFIX,netease.im
+
+DOMAIN-SUFFIX,baidu.com
+DOMAIN-SUFFIX,griddiaryapp.com
+DOMAIN-SUFFIX,sumi.io

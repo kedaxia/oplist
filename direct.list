@@ -41,9 +41,7 @@ DOMAIN-SUFFIX,maoercdn.com
 DOMAIN-SUFFIX,mincdn.com
 DOMAIN-SUFFIX,yo9.com
 
-DOMAIN-SUFFIX,weixin.qq.com
 DOMAIN-SUFFIX,huya.com
-DOMAIN-SUFFIX,webank.com
 DOMAIN-SUFFIX,douban.com
 DOMAIN-SUFFIX,xiaohongshu.com
 DOMAIN-KEYWORD,weibo
@@ -66,8 +64,52 @@ DOMAIN-SUFFIX,cutowallpaper.com
 DOMAIN-SUFFIX,yiandrive.com
 DOMAIN-SUFFIX,iill.top
 
-DOMAIN-SUFFIX,xiaohongshu.com
-DOMAIN-SUFFIX,qq.com
-DOMAIN-SUFFIX,douyin.com
-DOMAIN-SUFFIX,huya.com
 DOMAIN-SUFFIX,douyu.com
+
+; alibaba
+DOMAIN-SUFFIX,taobao.com
+DOMAIN-SUFFIX,guoguo-app.com
+DOMAIN-SUFFIX,cainiao.com
+DOMAIN-SUFFIX,alibaba.com
+DOMAIN-SUFFIX,tmall.com
+DOMAIN-SUFFIX,aliyun.com
+DOMAIN-SUFFIX,xiami.com
+DOMAIN-SUFFIX,youku.com
+DOMAIN-SUFFIX,ele.me
+DOMAIN-SUFFIX,koubei.me
+DOMAIN-SUFFIX,alipay.com
+DOMAIN-SUFFIX,antgroup.com
+DOMAIN-SUFFIX,1688.com
+
+; tencent
+DOMAIN-SUFFIX,qq.com
+DOMAIN-SUFFIX,weixin.qq.com
+DOMAIN-SUFFIX,webank.com
+DOMAIN-SUFFIX,tencent.com
+DOMAIN-SUFFIX,weixin.com
+DOMAIN-SUFFIX,imqq.com
+DOMAIN-SUFFIX,licai.com
+
+; meituan
+DOMAIN-SUFFIX,meituan.com
+DOMAIN-SUFFIX,dianping.com
+
+; pdd
+DOMAIN-SUFFIX,pinduoduo.com
+DOMAIN-SUFFIX,yangkeduo.com
+DOMAIN-SUFFIX,duoduohealth.com
+
+; jd
+DOMAIN-SUFFIX,jd.com
+DOMAIN-SUFFIX,jdcloud.com
+DOMAIN-SUFFIX,jddao.com
+DOMAIN-SUFFIX,7fresh.com
+
+; xiaohongshu
+DOMAIN-SUFFIX,xiaohongshu.com
+DOMAIN-SUFFIX,xhslink.com
+; DOMAIN-SUFFIX,red.io
+
+; bytedance
+DOMAIN-SUFFIX,douyin.com
+DOMAIN-SUFFIX,bytedance.com

@@ -24,8 +24,22 @@ DOMAIN-SUFFIX,biliapi.net
 DOMAIN-SUFFIX,biliapi.com
 DOMAIN-SUFFIX,im9.com
 DOMAIN-SUFFIX,acg.tv
+DOMAIN-SUFFIX,acgvideo.com
 DOMAIN-SUFFIX,biligame.com
 DOMAIN-SUFFIX,bilibili.tv
+DOMAIN-KEYWORD,bilicdn
+DOMAIN-KEYWORD,bilivideo
+DOMAIN-SUFFIX,b23.tv
+DOMAIN-SUFFIX,bigfun.cn
+DOMAIN-SUFFIX,bigfunapp.cn
+DOMAIN-KEYWORD,animetamashi
+DOMAIN-KEYWORD,anitama
+DOMAIN-SUFFIX,hdslb.com
+DOMAIN-SUFFIX,hdslb.org
+DOMAIN-SUFFIX,im9.com
+DOMAIN-SUFFIX,maoercdn.com
+DOMAIN-SUFFIX,mincdn.com
+DOMAIN-SUFFIX,yo9.com
 
 DOMAIN-SUFFIX,weixin.qq.com
 DOMAIN-SUFFIX,huya.com
@@ -48,3 +62,12 @@ DOMAIN-SUFFIX,sumi.io
 
 DOMAIN-SUFFIX,ffzy-play7.com
 DOMAIN-SUFFIX,cutowallpaper.com
+
+DOMAIN-SUFFIX,yiandrive.com
+DOMAIN-SUFFIX,iill.top
+
+DOMAIN-SUFFIX,xiaohongshu.com
+DOMAIN-SUFFIX,qq.com
+DOMAIN-SUFFIX,douyin.com
+DOMAIN-SUFFIX,huya.com
+DOMAIN-SUFFIX,douyu.com

@@ -6,8 +6,6 @@ hosts:
   cache.ott.hnbblive.itv.cmvideo.cn: pixman.io.hnbblive.dnsany.com
   zqhswlive.itv.cmvideo.cn: pixman.io.fifalive.dnsany.com
   studentlive.migucloud.com: pixman.io.fifalive.dnsany.com
-  live.fanmingming.com: 172.67.220.212
-  fanmingming.com: 172.67.220.212
 
 dns:
   enabled: true

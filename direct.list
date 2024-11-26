@@ -117,7 +117,7 @@ DOMAIN-SUFFIX,bytedance.com
 
 ; migu
 DOMAIN-SUFFIX,cmvideo.cn
-DOMAIN-SUFFIX,dnsany.com,DIRECT
+DOMAIN-SUFFIX,dnsany.com
 
 ; cs
 DOMAIN-SUFFIX,hltv.org

@@ -18,6 +18,8 @@ DOMAIN-SUFFIX,wslivehls.com
 DOMAIN-SUFFIX,cztv.com
 DOMAIN-SUFFIX,btime.com
 
+DOMAIN-SUFFIX,hltv.org
+
 ; bili
 DOMAIN-SUFFIX,bilibili.com
 DOMAIN-SUFFIX,biliapi.net
@@ -114,5 +116,3 @@ DOMAIN-SUFFIX,xhslink.com
 ; bytedance
 DOMAIN-SUFFIX,douyin.com
 DOMAIN-SUFFIX,bytedance.com
-
-DOMAIN-SUFFIX,hltv.org

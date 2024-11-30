@@ -1,4 +1,4 @@
-#tcp-concurrent: true
+tcp-concurrent: true
 
 hosts:
   cache.ott.ystenlive.itv.cmvideo.cn: pixman.io.ystenlive.dnsany.com

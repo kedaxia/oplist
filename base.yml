@@ -8,7 +8,8 @@ hosts:
   cache.ott.hnbblive.itv.cmvideo.cn: pixman.io.hnbblive.dnsany.com
   zqhswlive.itv.cmvideo.cn: pixman.io.fifalive.dnsany.com
   studentlive.migucloud.com: pixman.io.fifalive.dnsany.com
-  tvonline.sun0769.com: 113.214.170.247
+  #tvonline.sun0769.com: 113.214.170.247
+  tvonline.sun0769.com: tvonline.sun0769.com.ctecdn.cn
 
 dns:
   enable: true

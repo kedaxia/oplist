@@ -55,3 +55,4 @@ dns:
       - +.facebook.com
       - +.youtube.com
       - +.githubusercontent.com
+      - +.cloudfront.net

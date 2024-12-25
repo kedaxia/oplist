@@ -1,6 +1,5 @@
 ;DOMAIN-SUFFIX,webtvapi.now.com
 DOMAIN-SUFFIX,now.com
 ;DOMAIN-SUFFIX,api.viu.now.com
-;DOMAIN-SUFFIX,nowe.com
+DOMAIN-SUFFIX,nowe.com
 ;DOMAIN-SUFFIX,wstreamks.now.com
-REGEX,https:\/\/ewcdn\d{2}\.nowe\.com\/session\/10-[a-f0-9]{32}\/Content\/HLS_VOS1\/Live\/channel\(VOS_CH[a-zA-Z0-9]+\)\/index\.m3u8\?token=[a-f0-9]{32}_[0-9]+

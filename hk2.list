@@ -1,4 +1,5 @@
 DOMAIN-SUFFIX,mytvsuper.com
 DOMAIN-SUFFIX,tvb.com
 DOMAIN-SUFFIX,cloudfront.net
-DOMAIN-SUFFIX,nowe.com
+;DOMAIN-SUFFIX,nowe.com
+REGEX,https:\/\/ewcdn\d{2}\.nowe\.com\/session\/10-[a-f0-9]{32}\/Content\/HLS_VOS1\/Live\/channel\(VOS_CH[a-zA-Z0-9]+\)\/[0-9]+\.m3u8

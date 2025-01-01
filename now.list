@@ -1,11 +1,5 @@
-DOMAIN-SUFFIX,webtvapi.now.com
-;DOMAIN-SUFFIX,now.com
+;DOMAIN-SUFFIX,webtvapi.now.com
+DOMAIN-SUFFIX,now.com
 ;DOMAIN-SUFFIX,api.viu.now.com
-DOMAIN-SUFFIX,ewcdn04.nowe.com
-DOMAIN-SUFFIX,ewcdn16.nowe.com
-DOMAIN-SUFFIX,ewcdn101.nowe.com
-DOMAIN-SUFFIX,ewcdn104.nowe.com
-DOMAIN-SUFFIX,wstreamks.now.com
-DOMAIN-SUFFIX,ch76-live-stream.hoy.tv
-DOMAIN-SUFFIX,ch77-live-stream.hoy.tv
-DOMAIN-SUFFIX,ch78-live-stream.hoy.tv
+DOMAIN-SUFFIX,nowe.com
+;DOMAIN-SUFFIX,wstreamks.now.com

@@ -13,6 +13,8 @@ DOMAIN-SUFFIX,gztv.com
 DOMAIN-SUFFIX,jstv.com
 DOMAIN-SUFFIX,cloudvdn.com
 DOMAIN-SUFFIX,fjtv.net
+DOMAIN-SUFFIX,kksmg.com
+DOMAIN-SUFFIX,kankanews.com
 DOMAIN-SUFFIX,wslivehls.com
 DOMAIN-SUFFIX,cztv.com
 DOMAIN-SUFFIX,btime.com
@@ -21,7 +23,6 @@ DOMAIN-SUFFIX,sxrtv.com
 DOMAIN-KEYWORD,sun0769
 ; sdtv
 DOMAIN-SUFFIX,iqilu.com
-DOMAIN-SUFFIX,wslivehls.com
 
 DOMAIN-SUFFIX,hltv.org
 

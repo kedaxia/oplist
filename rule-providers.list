@@ -1,0 +1,42 @@
+  秋风广告规则:
+    type: http
+    behavior: domain
+    format: yaml
+    path: ./rule_providers/AWAvenue-Ads-Rule-Clash.yaml
+    url: "https://mirror.ghproxy.com/https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-Clash.yaml"
+    interval: 60480
+    
+  BanAD:
+    type: http
+    behavior: classical
+    url: "https://raw.staticdn.net/ACL4SSR/ACL4SSR/master/Clash/Providers/BanAD.yaml"
+    path: ./ACL4SSR/BanAD.yaml
+    interval: 86400
+    
+  BanEasyList:
+    type: http
+    behavior: classical
+    url: "https://raw.staticdn.net/ACL4SSR/ACL4SSR/master/Clash/Providers/BanEasyList.yaml"
+    path: ./ACL4SSR/BanEasyList.yaml
+    interval: 86400
+    
+  BanEasyListChina:
+    type: http
+    behavior: classical
+    url: "https://raw.staticdn.net/ACL4SSR/ACL4SSR/master/Clash/Providers/BanEasyListChina.yaml"
+    path: ./ACL4SSR/BanEasyListChina.yaml
+    interval: 86400
+    
+  BanEasyPrivacy:
+    type: http
+    behavior: classical
+    url: "https://raw.staticdn.net/ACL4SSR/ACL4SSR/master/Clash/Providers/BanEasyPrivacy.yaml"
+    path: ./ACL4SSR/BanEasyPrivacy.yaml
+    interval: 86400
+    
+  BanProgramAD:
+    type: http
+    behavior: classical
+    url: "https://raw.staticdn.net/ACL4SSR/ACL4SSR/master/Clash/Providers/BanProgramAD.yaml"
+    path: ./ACL4SSR/BanProgramAD.yaml
+    interval: 86400

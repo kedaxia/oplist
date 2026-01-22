@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Ingress OPR Assistant / 审Portal助手
 // @namespace    http://tampermonkey.net/
-// @version      1.4.1
-// @description  一键通过审核，可自定义按钮位置
+// @version      1.5.0
+// @description  一键通过审核，可自定义按钮位置 (优化版)
 // @author       You
 // @match        https://wayfarer.nianticlabs.com/new/review
 // @match        https://opr.ingress.com/new/review
@@ -17,416 +17,302 @@
     'use strict';
 
     // ============================================
-    // 配置和存储
+    // 配置和常量 (合并为单一对象减少内存)
     // ============================================
     const CONFIG = {
-        storageKeys: {
-            position: 'opr_assistant_position',
-            scale: 'opr_assistant_scale'
-        },
+        storageKeys: { position: 'opr_assistant_position', scale: 'opr_assistant_scale' },
         defaultPosition: { x: 20, y: 100 },
-        defaultScale: 1.0
+        defaultScale: 1.0,
+        scaleMin: 0.5,
+        scaleMax: 2.0,
+        scaleStep: 0.1,
+        toastDuration: 2500,
+        submitDelay: 500,
+        // 预编译的选择器
+        cardBases: [
+            "#appropriate-card", "#safe-card", "#exercise-card",
+            "#explore-card", "#socialize-card", "#permanent-location-card",
+            "#accurate-and-high-quality-card"
+        ],
+        approveSelector: "> div > div.action-buttons-row > button:nth-child(1)"
     };
 
-    // 评分卡片的基础选择器
-    const CARD_BASES = [
-        "#appropriate-card",
-        "#safe-card",
-        "#exercise-card",
-        "#explore-card",
-        "#socialize-card",
-        "#permanent-location-card",
-        "#accurate-and-high-quality-card"
-    ];
-
-    // 通用选择器部分 - 选择第一个按钮（通过）
-    const APPROVE_SELECTOR = "> div > div.action-buttons-row > button:nth-child(1)";
+    // 调试模式 - 生产环境设为 false
+    const DEBUG = false;
+    const log = DEBUG ? console.log.bind(console) : () => { };
 
     // ============================================
-    // 工具函数
+    // 存储工具 (简化)
     // ============================================
-    function getStorage(key, defaultValue) {
-        try {
-            const value = GM_getValue(key);
-            return value !== undefined ? JSON.parse(value) : defaultValue;
-        } catch (e) {
-            return defaultValue;
+    const Storage = {
+        get(key, defaultValue) {
+            try {
+                const value = GM_getValue(key);
+                return value !== undefined ? JSON.parse(value) : defaultValue;
+            } catch { return defaultValue; }
+        },
+        set(key, value) {
+            GM_setValue(key, JSON.stringify(value));
         }
-    }
-
-    function setStorage(key, value) {
-        GM_setValue(key, JSON.stringify(value));
-    }
+    };
 
     // ============================================
-    // 添加样式
+    // 添加样式 (压缩)
     // ============================================
     GM_addStyle(`
-        #opr-assistant-panel {
-            position: fixed;
-            z-index: 99999;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border: 1px solid #0f3460;
-            border-radius: 12px;
-            padding: 16px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            min-width: 180px;
-            color: #e4e4e4;
-            user-select: none;
-            transform-origin: top left;
-        }
-
-        #opr-assistant-panel.collapsed {
-            min-width: auto;
-            padding: 8px;
-        }
-
-        #opr-assistant-panel.collapsed .panel-content {
-            display: none;
-        }
-
-        .opr-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: move;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #0f3460;
-            margin-bottom: 12px;
-        }
-
-        #opr-assistant-panel.collapsed .opr-header {
-            padding-bottom: 0;
-            border-bottom: none;
-            margin-bottom: 0;
-        }
-
-        .opr-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #00d9ff;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .opr-collapse-btn {
-            background: none;
-            border: none;
-            color: #888;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 4px 8px;
-            transition: color 0.2s;
-        }
-
-        .opr-zoom-btn {
-            background: none;
-            border: none;
-            color: #888;
-            cursor: pointer;
-            font-size: 14px;
-            padding: 8px; /* 增大点击区域 */
-            margin-right: 4px;
-            transition: color 0.2s;
-        }
-
-        .opr-zoom-btn:hover { color: #00d9ff; }
-
-        .opr-collapse-btn:hover {
-            color: #00d9ff;
-        }
-
-        .opr-btn {
-            width: 100%;
-            padding: 12px 16px;
-            margin: 6px 0;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .opr-btn-approve {
-            background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
-            color: white;
-        }
-
-        .opr-btn-approve:hover {
-            background: linear-gradient(135deg, #00cec9 0%, #00b894 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0, 184, 148, 0.4);
-        }
-
-        .opr-btn-skip {
-            background: linear-gradient(135deg, #636e72 0%, #b2bec3 100%);
-            color: white;
-        }
-
-        .opr-btn-skip:hover {
-            background: linear-gradient(135deg, #b2bec3 0%, #636e72 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(99, 110, 114, 0.4);
-        }
-
-        .opr-btn-submit {
-            background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
-            color: white;
-        }
-
-        .opr-btn-submit:hover {
-            background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
-        }
-
-        .opr-btn-photo {
-            background: linear-gradient(135deg, #fdcb6e 0%, #f39c12 100%);
-            color: white;
-        }
-
-        .opr-btn-photo:hover {
-            background: linear-gradient(135deg, #f39c12 0%, #fdcb6e 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
-        }
-
-        .opr-toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            z-index: 100000;
-            animation: toastIn 0.3s ease;
-        }
-
-        @keyframes toastIn {
-            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-            to { opacity: 1; transform: translateX(-50%) translateY(0); }
-        }
+#opr-assistant-panel{position:fixed;z-index:99999;background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid #0f3460;border-radius:12px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.4);font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;min-width:180px;color:#e4e4e4;user-select:none;transform-origin:top left}
+#opr-assistant-panel.collapsed{min-width:auto;padding:8px}
+#opr-assistant-panel.collapsed .panel-content{display:none}
+.opr-header{display:flex;align-items:center;justify-content:space-between;cursor:move;padding-bottom:12px;border-bottom:1px solid #0f3460;margin-bottom:12px}
+#opr-assistant-panel.collapsed .opr-header{padding-bottom:0;border-bottom:none;margin-bottom:0}
+.opr-title{font-size:14px;font-weight:600;color:#00d9ff;display:flex;align-items:center;gap:8px}
+.opr-collapse-btn,.opr-zoom-btn{background:none;border:none;color:#888;cursor:pointer;padding:8px;transition:color .2s}
+.opr-collapse-btn:hover,.opr-zoom-btn:hover{color:#00d9ff}
+.opr-btn{width:100%;padding:12px 16px;margin:6px 0;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .3s ease;display:flex;align-items:center;justify-content:center;gap:8px}
+.opr-btn-approve{background:linear-gradient(135deg,#00b894,#00cec9);color:#fff}
+.opr-btn-approve:hover{background:linear-gradient(135deg,#00cec9,#00b894);transform:translateY(-2px);box-shadow:0 4px 15px rgba(0,184,148,.4)}
+.opr-btn-skip{background:linear-gradient(135deg,#636e72,#b2bec3);color:#fff}
+.opr-btn-skip:hover{background:linear-gradient(135deg,#b2bec3,#636e72);transform:translateY(-2px);box-shadow:0 4px 15px rgba(99,110,114,.4)}
+.opr-btn-photo{background:linear-gradient(135deg,#fdcb6e,#f39c12);color:#fff}
+.opr-btn-photo:hover{background:linear-gradient(135deg,#f39c12,#fdcb6e);transform:translateY(-2px);box-shadow:0 4px 15px rgba(243,156,18,.4)}
+.opr-toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.8);color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;z-index:100000;animation:toastIn .3s ease}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
     `);
 
     // ============================================
-    // 审核操作 - 核心功能
+    // 缓存的 DOM 引用
+    // ============================================
+    let panelRef = null;
+    let toastTimeout = null;
+
+    // ============================================
+    // 审核操作 - 核心功能 (优化)
     // ============================================
     function clickApproveButtons() {
         let clickedCount = 0;
+        const { cardBases, approveSelector } = CONFIG;
 
-        // 点击所有卡片的第一个按钮（通过）
-        CARD_BASES.forEach(function (base) {
-            const selector = base + APPROVE_SELECTOR;
-            const button = document.querySelector(selector);
+        // 使用 for 循环代替 forEach (更快)
+        for (let i = 0; i < cardBases.length; i++) {
+            const button = document.querySelector(cardBases[i] + approveSelector);
             if (button) {
                 button.click();
                 clickedCount++;
-                console.log("已点击: " + selector);
-            } else {
-                console.log("未找到按钮: " + selector);
+                log('已点击:', cardBases[i]);
             }
-        });
+        }
 
-        // 点击所有 toggle 按钮（偶数索引的）
-        const toggleButtons = Array.from(document.querySelectorAll('button[id^="mat-button-toggle-"]'))
-            .filter((button, index) => index % 2 === 0);
-
-        toggleButtons.forEach(function (btn) {
-            btn.click();
+        // 优化 toggle 按钮选择 - 使用 CSS 选择器代替 filter
+        const toggleButtons = document.querySelectorAll('button[id^="mat-button-toggle-"]');
+        for (let i = 0; i < toggleButtons.length; i += 2) {
+            toggleButtons[i].click();
             clickedCount++;
-            console.log("已点击toggle: " + btn.id);
-        });
+            log('已点击toggle:', toggleButtons[i].id);
+        }
 
         return clickedCount;
     }
 
-    function clickSkipButton() {
-        // 遍历查找包含"略過"或"Skip"文字的按钮
-        const allButtons = document.querySelectorAll('button.wf-button, button[wf-button]');
-        for (const btn of allButtons) {
+    function findButtonByText(selector, texts) {
+        const buttons = document.querySelectorAll(selector);
+        for (const btn of buttons) {
             const text = btn.textContent.trim();
-            if (text === '略過' || text === 'Skip' || text.includes('略過') || text.includes('Skip')) {
+            if (texts.some(t => text === t || text.includes(t))) {
+                return btn;
+            }
+        }
+        return null;
+    }
+
+    function clickSkipButton() {
+        const btn = findButtonByText('button.wf-button, button[wf-button]', ['略過', 'Skip']);
+        if (btn) {
+            btn.click();
+            log('已点击略过按钮');
+            return true;
+        }
+        log('未找到略过按钮');
+        return false;
+    }
+
+    function clickSubmitButton() {
+        const buttons = document.querySelectorAll('button.wf-button, button[wf-button]');
+        for (const btn of buttons) {
+            const text = btn.textContent.trim();
+            if ((text === '送出' || text === 'Submit' || text.includes('送出') || text.includes('Submit')) &&
+                (btn.classList.contains('wf-button--primary') || btn.classList.contains('wf-split-button__main'))) {
                 btn.click();
-                console.log('已点击略过按钮: ' + text);
+                log('已点击送出按钮');
+                return true;
+            }
+        }
+        log('未找到送出按钮');
+        return false;
+    }
+
+    function clickPhotoApprove() {
+        // 先尝试文字匹配
+        const photoCards = document.querySelectorAll('.photo-card__overlay');
+        for (const card of photoCards) {
+            const text = card.textContent || '';
+            if (text.includes('所有照片均符合標準') || text.includes('All photos meet') || text.includes('所有照片')) {
+                card.click();
+                log('已点击照片通过选项');
                 return true;
             }
         }
 
-        console.log('未找到略过按钮');
+        // 备选：查找 check 图标
+        const checkIcon = document.querySelector('.photo-card__overlay mat-icon');
+        if (checkIcon?.textContent.trim() === 'check') {
+            const overlay = checkIcon.closest('.photo-card__overlay');
+            if (overlay) {
+                overlay.click();
+                log('已点击照片check图标');
+                return true;
+            }
+        }
+
+        log('未找到照片通过选项');
         return false;
+    }
+
+    // ============================================
+    // 操作处理器 (统一延迟提交逻辑)
+    // ============================================
+    function delayedSubmit(successMsg) {
+        setTimeout(() => {
+            if (clickSubmitButton()) {
+                showToast('✓ 已自动送出');
+            }
+        }, CONFIG.submitDelay);
     }
 
     function handleApprove() {
         const count = clickApproveButtons();
         if (count > 0) {
             showToast(`✓ 已勾选 ${count} 项，正在送出...`);
-            // 延迟送出，等待页面响应
-            setTimeout(() => {
-                const submitted = clickSubmitButton();
-                if (submitted) {
-                    showToast('✓ 已自动送出');
-                }
-            }, 500);
+            delayedSubmit();
         } else {
             showToast('⚠️ 未找到可点击的按钮');
         }
     }
 
     function handleSkip() {
-        const success = clickSkipButton();
-        if (success) {
-            showToast('→ 已略过');
-        } else {
-            showToast('⚠️ 未找到略过按钮');
-        }
-    }
-
-    function clickPhotoApprove() {
-        // 查找"所有照片均符合標準"的元素并点击
-        const photoCards = document.querySelectorAll('.photo-card__overlay');
-        for (const card of photoCards) {
-            const text = card.textContent || '';
-            if (text.includes('所有照片均符合標準') || text.includes('All photos meet') || text.includes('所有照片')) {
-                card.click();
-                console.log('已点击照片通过选项');
-                return true;
-            }
-        }
-
-        // 备选：查找包含check图标的卡片
-        const checkIcons = document.querySelectorAll('.photo-card__overlay mat-icon');
-        for (const icon of checkIcons) {
-            if (icon.textContent.trim() === 'check') {
-                const overlay = icon.closest('.photo-card__overlay');
-                if (overlay) {
-                    overlay.click();
-                    console.log('已点击照片check图标');
-                    return true;
-                }
-            }
-        }
-
-        console.log('未找到照片通过选项');
-        return false;
+        showToast(clickSkipButton() ? '→ 已略过' : '⚠️ 未找到略过按钮');
     }
 
     function handlePhotoApprove() {
-        const success = clickPhotoApprove();
-        if (success) {
+        if (clickPhotoApprove()) {
             showToast('📷 照片已通过，正在送出...');
-            // 延迟送出
-            setTimeout(() => {
-                const submitted = clickSubmitButton();
-                if (submitted) {
-                    showToast('✓ 已自动送出');
-                }
-            }, 500);
+            delayedSubmit();
         } else {
             showToast('⚠️ 未找到照片通过选项');
         }
     }
 
-    function clickSubmitButton() {
-        // 查找送出按钮
-        const allButtons = document.querySelectorAll('button.wf-button, button[wf-button]');
-        for (const btn of allButtons) {
-            const text = btn.textContent.trim();
-            // 检查是否是主要的送出按钮
-            if ((text === '送出' || text === 'Submit' || text.includes('送出') || text.includes('Submit')) &&
-                (btn.classList.contains('wf-button--primary') || btn.classList.contains('wf-split-button__main'))) {
-                btn.click();
-                console.log('已点击送出按钮: ' + text);
-                return true;
-            }
+    // ============================================
+    // UI 辅助函数 (优化)
+    // ============================================
+    function showToast(message) {
+        // 清除现有 toast 和定时器
+        if (toastTimeout) {
+            clearTimeout(toastTimeout);
+            toastTimeout = null;
         }
-        console.log('未找到送出按钮');
-        return false;
-    }
 
-    function handleSubmit() {
-        const success = clickSubmitButton();
-        if (success) {
-            showToast('✓ 已送出');
-        } else {
-            showToast('⚠️ 未找到送出按钮');
+        let toast = document.querySelector('.opr-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.className = 'opr-toast';
+            document.body.appendChild(toast);
         }
+
+        toast.textContent = message;
+
+        toastTimeout = setTimeout(() => {
+            toast.remove();
+            toastTimeout = null;
+        }, CONFIG.toastDuration);
     }
 
     // ============================================
-    // 主面板
+    // 主面板 (优化)
     // ============================================
     function createPanel() {
-        // 避免重复创建
-        if (document.getElementById('opr-assistant-panel')) return;
+        if (panelRef) return; // 使用缓存引用检查
 
-        const savedPosition = getStorage(CONFIG.storageKeys.position, CONFIG.defaultPosition);
+        const savedPosition = Storage.get(CONFIG.storageKeys.position, CONFIG.defaultPosition);
+        const savedScale = Storage.get(CONFIG.storageKeys.scale, CONFIG.defaultScale);
 
         const panel = document.createElement('div');
         panel.id = 'opr-assistant-panel';
-        panel.style.left = savedPosition.x + 'px';
-        panel.style.top = savedPosition.y + 'px';
+        panel.style.cssText = `left:${savedPosition.x}px;top:${savedPosition.y}px;transform:scale(${savedScale})`;
+        panel.dataset.scale = savedScale;
 
         panel.innerHTML = `
             <div class="opr-header">
-                <div class="opr-title">
-                    <span>🎮</span>
-                    <span>OPR 助手</span>
-                </div>
+                <div class="opr-title"><span>🎮</span><span>OPR 助手</span></div>
                 <div class="opr-controls">
-                    <button class="opr-zoom-btn" id="btn-zoom-out" title="缩小">-</button>
-                    <button class="opr-zoom-btn" id="btn-zoom-in" title="放大">+</button>
+                    <button class="opr-zoom-btn" data-action="zoom-out" title="缩小">-</button>
+                    <button class="opr-zoom-btn" data-action="zoom-in" title="放大">+</button>
                     <button class="opr-collapse-btn" title="折叠/展开">▼</button>
                 </div>
             </div>
             <div class="panel-content">
-                <button class="opr-btn opr-btn-approve" id="opr-approve-btn">
-                    <span>✓</span> 一键通过
-                </button>
-                <button class="opr-btn opr-btn-photo" id="opr-photo-btn">
-                    <span>📷</span> 照片通过
-                </button>
-                <button class="opr-btn opr-btn-skip" id="opr-skip-btn">
-                    <span>→</span> 略过
-                </button>
+                <button class="opr-btn opr-btn-approve" data-action="approve"><span>✓</span> 一键通过</button>
+                <button class="opr-btn opr-btn-photo" data-action="photo"><span>📷</span> 照片通过</button>
+                <button class="opr-btn opr-btn-skip" data-action="skip"><span>→</span> 略过</button>
             </div>
         `;
 
         document.body.appendChild(panel);
-        setupDrag(panel);
+        panelRef = panel;
 
-        // 初始化缩放
-        const savedScale = getStorage(CONFIG.storageKeys.scale, CONFIG.defaultScale);
-        updatePanelScale(panel, savedScale);
-
-        setupButtonEvents(panel);
-    }
-
-    function updatePanelScale(panel, scale) {
-        // 限制范围 0.5 - 2.0
-        const newScale = Math.min(Math.max(scale, 0.5), 2.0);
-        panel.style.transform = `scale(${newScale})`;
-        panel.dataset.scale = newScale;
-        setStorage(CONFIG.storageKeys.scale, newScale);
+        setupPanelEvents(panel);
     }
 
     // ============================================
-    // 拖拽功能
+    // 事件处理 (使用事件委托优化)
     // ============================================
-    function setupDrag(panel) {
+    function setupPanelEvents(panel) {
         const header = panel.querySelector('.opr-header');
         let isDragging = false;
         let startX, startY, initialX, initialY;
 
+        // 动作处理映射
+        const actions = {
+            'approve': handleApprove,
+            'photo': handlePhotoApprove,
+            'skip': handleSkip,
+            'zoom-in': () => updateScale(0.1),
+            'zoom-out': () => updateScale(-0.1)
+        };
+
+        function updateScale(delta) {
+            const current = parseFloat(panel.dataset.scale || 1);
+            const newScale = Math.min(Math.max(current + delta, CONFIG.scaleMin), CONFIG.scaleMax);
+            panel.style.transform = `scale(${newScale})`;
+            panel.dataset.scale = newScale;
+            Storage.set(CONFIG.storageKeys.scale, newScale);
+        }
+
+        // 使用事件委托处理所有按钮点击
+        panel.addEventListener('click', (e) => {
+            const action = e.target.closest('[data-action]')?.dataset.action;
+            if (action && actions[action]) {
+                e.stopPropagation();
+                actions[action]();
+            }
+
+            // 折叠按钮
+            if (e.target.classList.contains('opr-collapse-btn')) {
+                panel.classList.toggle('collapsed');
+                e.target.textContent = panel.classList.contains('collapsed') ? '▶' : '▼';
+            }
+        });
+
+        // 拖拽处理
         function handleStart(clientX, clientY) {
             isDragging = true;
             startX = clientX;
@@ -437,39 +323,30 @@
 
         function handleMove(clientX, clientY) {
             if (!isDragging) return;
-            const dx = clientX - startX;
-            const dy = clientY - startY;
-            // 确保面板不会移出可视区域 too much (Optional constraint but good for mobile)
-            // 计算边界时考虑缩放
             const scale = parseFloat(panel.dataset.scale || 1);
-            const scaledWidth = panel.offsetWidth * scale;
-            const scaledHeight = panel.offsetHeight * scale;
+            const maxX = window.innerWidth - panel.offsetWidth * scale;
+            const maxY = window.innerHeight - panel.offsetHeight * scale;
 
-            const newX = Math.max(0, Math.min(window.innerWidth - scaledWidth, initialX + dx));
-            const newY = Math.max(0, Math.min(window.innerHeight - scaledHeight, initialY + dy));
-
-            panel.style.left = newX + 'px';
-            panel.style.top = newY + 'px';
+            panel.style.left = Math.max(0, Math.min(maxX, initialX + clientX - startX)) + 'px';
+            panel.style.top = Math.max(0, Math.min(maxY, initialY + clientY - startY)) + 'px';
         }
 
         function handleEnd() {
             if (isDragging) {
                 isDragging = false;
-                setStorage(CONFIG.storageKeys.position, { x: panel.offsetLeft, y: panel.offsetTop });
+                Storage.set(CONFIG.storageKeys.position, { x: panel.offsetLeft, y: panel.offsetTop });
             }
         }
 
-        // Mouse events
+        // 鼠标事件
         header.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('opr-collapse-btn')) return;
+            if (e.target.closest('button')) return;
             handleStart(e.clientX, e.clientY);
             document.body.style.userSelect = 'none';
         });
 
-        document.addEventListener('mousemove', (e) => {
-            if (isDragging) handleMove(e.clientX, e.clientY);
-        });
-
+        // 使用单一文档级事件监听器
+        document.addEventListener('mousemove', (e) => isDragging && handleMove(e.clientX, e.clientY));
         document.addEventListener('mouseup', () => {
             if (isDragging) {
                 handleEnd();
@@ -477,160 +354,76 @@
             }
         });
 
-        // Touch events
+        // 触摸事件
         header.addEventListener('touchstart', (e) => {
-            if (e.target.classList.contains('opr-collapse-btn') ||
-                e.target.classList.contains('opr-zoom-btn')) return;
-            const touch = e.touches[0];
-            handleStart(touch.clientX, touch.clientY);
-            e.preventDefault(); // 防止滚动
+            if (e.target.closest('button')) return;
+            handleStart(e.touches[0].clientX, e.touches[0].clientY);
+            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('touchmove', (e) => {
             if (isDragging) {
-                const touch = e.touches[0];
-                handleMove(touch.clientX, touch.clientY);
-                e.preventDefault(); // 防止滚动
+                handleMove(e.touches[0].clientX, e.touches[0].clientY);
+                e.preventDefault();
             }
         }, { passive: false });
 
         document.addEventListener('touchend', handleEnd);
-
-        // 折叠功能
-        const collapseBtn = panel.querySelector('.opr-collapse-btn');
-        collapseBtn.addEventListener('click', () => {
-            panel.classList.toggle('collapsed');
-            collapseBtn.textContent = panel.classList.contains('collapsed') ? '▶' : '▼';
-        });
-
-        // 阻止按钮触发拖拽
-        const zoomBtns = panel.querySelectorAll('.opr-zoom-btn');
-        zoomBtns.forEach(btn => {
-            btn.addEventListener('touchstart', (e) => e.stopPropagation());
-            btn.addEventListener('mousedown', (e) => e.stopPropagation());
-        });
-        collapseBtn.addEventListener('touchstart', (e) => e.stopPropagation());
-        collapseBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     }
 
     // ============================================
-    // UI 辅助函数
-    // ============================================
-    function showToast(message) {
-        const existing = document.querySelector('.opr-toast');
-        if (existing) existing.remove();
-
-        const toast = document.createElement('div');
-        toast.className = 'opr-toast';
-        toast.textContent = message;
-        document.body.appendChild(toast);
-
-        setTimeout(() => toast.remove(), 2500);
-    }
-
-    function setupButtonEvents(panel) {
-        panel.querySelector('#opr-approve-btn').addEventListener('click', handleApprove);
-        panel.querySelector('#opr-photo-btn').addEventListener('click', handlePhotoApprove);
-        panel.querySelector('#opr-skip-btn').addEventListener('click', handleSkip);
-
-        // 缩放控制
-        panel.querySelector('#btn-zoom-in').addEventListener('click', () => {
-            const current = parseFloat(panel.dataset.scale || 1);
-            updatePanelScale(panel, current + 0.1);
-        });
-
-        panel.querySelector('#btn-zoom-out').addEventListener('click', () => {
-            const current = parseFloat(panel.dataset.scale || 1);
-            updatePanelScale(panel, current - 0.1);
-        });
-    }
-
-    // ============================================
-    // 键盘快捷键
+    // 键盘快捷键 (优化 - 只注册一次)
     // ============================================
     function setupKeyboardShortcuts() {
-        // 使用 window 级别监听
-        function handleKeyDown(e) {
-            // 跳过输入框和可编辑元素
+        const shortcuts = {
+            'a': handleApprove, 's': handlePhotoApprove, 'd': handleSkip,
+            '1': handleApprove, '2': handlePhotoApprove, '3': handleSkip
+        };
+
+        document.addEventListener('keydown', (e) => {
             const target = e.target;
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
                 return;
             }
 
-            const keyCode = e.keyCode || e.which;
-            const key = e.key ? e.key.toLowerCase() : '';
+            const key = e.key?.toLowerCase();
 
-            // Alt + 键 方案
-            if (e.altKey) {
-                if (key === 'a' || keyCode === 65) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    handleApprove();
-                    console.log('快捷键触发: Alt+A');
-                    return false;
-                } else if (key === 's' || keyCode === 83) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    handlePhotoApprove();
-                    console.log('快捷键触发: Alt+S');
-                    return false;
-                } else if (key === 'd' || keyCode === 68) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    handleSkip();
-                    console.log('快捷键触发: Alt+D');
-                    return false;
-                }
+            // Alt + 键
+            if (e.altKey && shortcuts[key]) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                shortcuts[key]();
+                log('快捷键触发: Alt+' + key.toUpperCase());
+                return;
             }
 
-            // 备选方案：数字键 (1=通过, 2=略过)
-            if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-                if (key === '1' || keyCode === 49) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    handleApprove();
-                    console.log('快捷键触发: 1 一键通过');
-                    return false;
-                } else if (key === '2' || keyCode === 50) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    handlePhotoApprove();
-                    console.log('快捷键触发: 2 照片通过');
-                    return false;
-                } else if (key === '3' || keyCode === 51) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    handleSkip();
-                    console.log('快捷键触发: 3 略过');
-                    return false;
-                }
+            // 数字键 (无修饰键)
+            if (!e.ctrlKey && !e.altKey && !e.metaKey && ['1', '2', '3'].includes(key)) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                shortcuts[key]();
+                log('快捷键触发:', key);
             }
-        }
+        }, true);
 
-        // 在 window 和 document 上都注册，增加成功率
-        window.addEventListener('keydown', handleKeyDown, true);
-        document.addEventListener('keydown', handleKeyDown, true);
-
-        console.log('🎮 OPR Assistant 快捷键已注册 (Alt+A/S/D 或 1/2/3)');
+        log('🎮 OPR Assistant 快捷键已注册 (Alt+A/S/D 或 1/2/3)');
     }
 
     // ============================================
-    // 初始化
+    // 初始化 (简化)
     // ============================================
     function init() {
+        if (panelRef) return; // 防止重复初始化
         createPanel();
         setupKeyboardShortcuts();
-        console.log('🎮 OPR Assistant 已加载');
+        log('🎮 OPR Assistant 已加载');
     }
 
-    // 启动 - 使用多种方式确保加载
-    if (document.readyState === 'complete') {
-        init();
+    // 单一入口点 - document-idle 已确保 DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init, { once: true });
     } else {
-        window.addEventListener('DOMContentLoaded', init, false);
-        window.addEventListener('load', function () {
-            setTimeout(init, 1000);
-        }, false);
+        init();
     }
 
 })();

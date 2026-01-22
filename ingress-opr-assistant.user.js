@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ingress OPR Assistant / 审Portal助手
 // @namespace    http://tampermonkey.net/
-// @version      1.5.0
+// @version      1.5.1
 // @description  一键通过审核，可自定义按钮位置 (优化版)
 // @author       You
 // @match        https://wayfarer.nianticlabs.com/new/review
@@ -28,6 +28,7 @@
         scaleStep: 0.1,
         toastDuration: 2500,
         submitDelay: 500,
+        scrollDistance: 300, // 滚动距离(像素)
         // 预编译的选择器
         cardBases: [
             "#appropriate-card", "#safe-card", "#exercise-card",
@@ -211,6 +212,37 @@
         }
     }
 
+    function handleScrollUp() {
+        scrollPage(-CONFIG.scrollDistance);
+    }
+
+    function handleScrollDown() {
+        scrollPage(CONFIG.scrollDistance);
+    }
+
+    function scrollPage(distance) {
+        // 尝试多种滚动目标
+        const scrollTargets = [
+            document.querySelector('.wf-page-content'),
+            document.querySelector('mat-sidenav-content'),
+            document.querySelector('.review-page'),
+            document.documentElement,
+            document.body
+        ];
+
+        for (const target of scrollTargets) {
+            if (target && target.scrollHeight > target.clientHeight) {
+                target.scrollBy({ top: distance, behavior: 'smooth' });
+                log('滚动目标:', target.className || target.tagName);
+                return;
+            }
+        }
+
+        // 回退到 window
+        window.scrollBy({ top: distance, behavior: 'smooth' });
+        log('滚动: window');
+    }
+
     // ============================================
     // UI 辅助函数 (优化)
     // ============================================
@@ -377,7 +409,8 @@
     function setupKeyboardShortcuts() {
         const shortcuts = {
             'a': handleApprove, 's': handlePhotoApprove, 'd': handleSkip,
-            '1': handleApprove, '2': handlePhotoApprove, '3': handleSkip
+            '1': handleApprove, '2': handlePhotoApprove, '3': handleSkip,
+            '8': handleScrollUp, '5': handleScrollDown
         };
 
         document.addEventListener('keydown', (e) => {
@@ -388,7 +421,7 @@
 
             const key = e.key?.toLowerCase();
 
-            // Alt + 键
+            // Alt + 键 (A/S/D)
             if (e.altKey && shortcuts[key]) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
@@ -397,16 +430,27 @@
                 return;
             }
 
-            // 数字键 (无修饰键)
-            if (!e.ctrlKey && !e.altKey && !e.metaKey && ['1', '2', '3'].includes(key)) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                shortcuts[key]();
-                log('快捷键触发:', key);
+            // 无修饰键操作
+            if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+                // 数字键 (1/2/3)
+                if (['1', '2', '3'].includes(key)) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    shortcuts[key]();
+                    log('快捷键触发:', key);
+                    return;
+                }
+                // 数字键 8/5 上下滚动
+                if (key === '8' || key === '5') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    shortcuts[key]();
+                    log('滚动:', key);
+                }
             }
         }, true);
 
-        log('🎮 OPR Assistant 快捷键已注册 (Alt+A/S/D 或 1/2/3)');
+        log('🎮 OPR Assistant 快捷键已注册 (Alt+A/S/D, 1/2/3, 8/5)');
     }
 
     // ============================================

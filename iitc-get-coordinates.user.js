@@ -284,6 +284,44 @@ function wrapper(plugin_info) {
         reader.readAsText(file);
     };
 
+    self.importBookmarksFromUrl = function (url) {
+        if (!url) {
+            self.showToast('⚠️ 请输入URL');
+            return;
+        }
+        self.showToast('⏳ 正在从URL导入...');
+        fetch(url)
+            .then(function (resp) {
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                return resp.json();
+            })
+            .then(function (imported) {
+                if (!Array.isArray(imported)) throw new Error('Invalid format');
+                var count = 0;
+                imported.forEach(function (bm) {
+                    if (bm.lat && bm.lng && bm.name) {
+                        if (!self.bookmarks.find(function (b) { return b.id === bm.id; })) {
+                            self.bookmarks.push(bm);
+                            count++;
+                        } else {
+                            var newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+                            bm.id = newId;
+                            self.bookmarks.push(bm);
+                            count++;
+                        }
+                    }
+                });
+                self.saveBookmarks();
+                self.renderAllBookmarks();
+                self.updateBookmarksUI();
+                self.showToast('📥 已从URL导入 ' + count + ' 个标记');
+            })
+            .catch(function (err) {
+                console.warn('[GetCoords] URL import failed', err);
+                self.showToast('⚠️ URL导入失败: ' + err.message);
+            });
+    };
+
     self.addBookmark = function (lat, lng, name, color) {
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const bm = {
@@ -650,7 +688,11 @@ function wrapper(plugin_info) {
             <button id="gc-export-bm" class="gc-btn gc-btn-sm" title="导出标记为JSON文件">📤 导出</button>
             <button id="gc-import-bm-btn" class="gc-btn gc-btn-sm" title="从JSON文件导入标记">📥 导入</button>
             <input type="file" id="gc-import-bm-input" accept=".json" style="display:none">
-            <button id="gc-clear-bm" class="gc-btn gc-btn-danger gc-btn-sm" style="margin-left:auto">🗑️ 清除</button>
+            <button id="gc-import-url-btn" class="gc-btn gc-btn-sm" title="从URL导入标记">🔗 URL导入</button>
+          </div>
+          <div id="gc-url-import-row" class="gc-url-import-row" style="display:none">
+            <input type="text" id="gc-import-url-input" class="gc-input" placeholder="输入JSON文件URL...">
+            <button id="gc-import-url-go" class="gc-btn gc-btn-sm gc-btn-primary">� 导入</button>
           </div>
         </div>
 
@@ -723,17 +765,26 @@ function wrapper(plugin_info) {
                 });
             }
 
-            // Clear bookmarks
-            var clearBmBtn = document.getElementById('gc-clear-bm');
-            if (clearBmBtn) clearBmBtn.addEventListener('click', function () {
-                if (!confirm('确定清除所有标记？')) return;
-                self.bookmarks = [];
-                self.saveBookmarks();
-                self.bookmarkLayerGroup.clearLayers();
-                self.bookmarkMapMarkers = {};
-                self.bookmarkMapCircles = {};
-                self.updateBookmarksUI();
-            });
+            // Import from URL
+            var importUrlBtn = document.getElementById('gc-import-url-btn');
+            var importUrlRow = document.getElementById('gc-url-import-row');
+            var importUrlInput = document.getElementById('gc-import-url-input');
+            var importUrlGo = document.getElementById('gc-import-url-go');
+            if (importUrlBtn && importUrlRow) {
+                importUrlBtn.addEventListener('click', function () {
+                    importUrlRow.style.display = importUrlRow.style.display === 'none' ? 'flex' : 'none';
+                    if (importUrlRow.style.display === 'flex' && importUrlInput) importUrlInput.focus();
+                });
+            }
+            if (importUrlGo && importUrlInput) {
+                importUrlGo.addEventListener('click', function () {
+                    self.importBookmarksFromUrl(importUrlInput.value.trim());
+                });
+                importUrlInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') self.importBookmarksFromUrl(this.value.trim());
+                });
+            }
+
 
             // Toggle circles
             var circleToggle = document.getElementById('gc-bm-show-circles');
@@ -859,6 +910,7 @@ function wrapper(plugin_info) {
 .gc-bm-item-coord{font-size:10px;font-family:'SF Mono',Consolas,Monaco,monospace;color:#5a7a94}
 .gc-bm-item-actions{display:flex;gap:2px;flex-shrink:0}
 .gc-count-badge{font-size:10px;color:#5bbcf2;background:#5bbcf215;padding:0 5px;border-radius:8px;margin-left:4px}
+.gc-url-import-row{display:flex;gap:6px;align-items:center;margin-top:6px}
 .gc-bm-opt{font-size:10px;font-weight:400;color:#888;cursor:pointer;display:flex;align-items:center;gap:3px}
 .gc-bm-opt input{margin:0;vertical-align:middle}
 

@@ -2,8 +2,8 @@
 // @id             iitc-plugin-get-coordinates
 // @name           IITC Plugin: 获取坐标 (Get Coordinates)
 // @category       Info
-// @version        1.0.0
-// @description    点击地图获取指定位置的经纬度坐标，支持多种格式复制、Portal 坐标获取、搜索定位。
+// @version        1.1.0
+// @description    点击地图获取指定位置的经纬度坐标，支持多种格式复制、Portal 坐标获取、搜索定位、添加标记。
 // @author         Kedaxia
 // @namespace      https://github.com/kedaxia
 // @match          https://intel.ingress.com/*
@@ -21,12 +21,30 @@ function wrapper(plugin_info) {
 
     // ── State ──────────────────────────────────────────────────
     self.STORAGE_KEY = 'plugin-get-coordinates-history';
+    self.BOOKMARKS_KEY = 'plugin-get-coordinates-bookmarks';
     self.isPickMode = false;
     self.pickMarker = null;
     self.historyMarkers = [];
     self.layerGroup = null;
+    self.bookmarkLayerGroup = null;
+    self.bookmarkMapMarkers = {}; // id -> L.marker
     self.history = [];
+    self.bookmarks = [];
     self.MAX_HISTORY = 50;
+    self._lastPickedLat = null;
+    self._lastPickedLng = null;
+    self._lastPickedSource = '';
+
+    self.MARKER_COLORS = [
+        { name: '红色', value: '#e74c3c' },
+        { name: '蓝色', value: '#3498db' },
+        { name: '绿色', value: '#2ecc71' },
+        { name: '橙色', value: '#e67e22' },
+        { name: '紫色', value: '#9b59b6' },
+        { name: '青色', value: '#1abc9c' },
+        { name: '粉色', value: '#e84393' },
+        { name: '黄色', value: '#f1c40f' },
+    ];
 
     // ── Coordinate Formats ────────────────────────────────────
     self.formatCoords = function (lat, lng, format) {
@@ -137,6 +155,9 @@ function wrapper(plugin_info) {
     self.onMapClick = function (e) {
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
+        self._lastPickedLat = lat;
+        self._lastPickedLng = lng;
+        self._lastPickedSource = '地图选取';
         self.showCoordinateResult(lat, lng, '地图选取');
         self.addToHistory(lat, lng, '地图选取');
         self.placeMarker(lat, lng);
@@ -199,8 +220,120 @@ function wrapper(plugin_info) {
         return false;
     };
 
+    // ── Bookmarks (Saved Markers) ─────────────────────────────
+    self.saveBookmarks = function () {
+        try {
+            localStorage.setItem(self.BOOKMARKS_KEY, JSON.stringify(self.bookmarks));
+        } catch (e) { console.warn('[GetCoords] Bookmark save failed', e); }
+    };
+
+    self.loadBookmarks = function () {
+        try {
+            const s = localStorage.getItem(self.BOOKMARKS_KEY);
+            if (s) { self.bookmarks = JSON.parse(s); return true; }
+        } catch (e) { console.warn('[GetCoords] Bookmark load failed', e); }
+        return false;
+    };
+
+    self.addBookmark = function (lat, lng, name, color) {
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const bm = {
+            id: id,
+            lat: lat,
+            lng: lng,
+            name: name || '标记 #' + (self.bookmarks.length + 1),
+            color: color || '#e74c3c',
+            time: new Date().toLocaleString('zh-CN', { hour12: false }),
+        };
+        self.bookmarks.unshift(bm);
+        self.saveBookmarks();
+        self.renderBookmarkOnMap(bm);
+        self.updateBookmarksUI();
+        self.showToast('📌 已添加标记: ' + bm.name);
+        return bm;
+    };
+
+    self.removeBookmark = function (id) {
+        self.bookmarks = self.bookmarks.filter(function (b) { return b.id !== id; });
+        self.saveBookmarks();
+        // Remove from map
+        if (self.bookmarkMapMarkers[id]) {
+            self.bookmarkLayerGroup.removeLayer(self.bookmarkMapMarkers[id]);
+            delete self.bookmarkMapMarkers[id];
+        }
+        self.updateBookmarksUI();
+    };
+
+    self.renderBookmarkOnMap = function (bm) {
+        if (self.bookmarkMapMarkers[bm.id]) {
+            self.bookmarkLayerGroup.removeLayer(self.bookmarkMapMarkers[bm.id]);
+        }
+        var marker = L.marker(L.latLng(bm.lat, bm.lng), {
+            icon: L.divIcon({
+                className: 'gc-bm-icon',
+                html: '<div class="gc-bm-pin" style="background:' + bm.color + ';border-color:' + bm.color + '"><span class="gc-bm-dot"></span></div>',
+                iconSize: [18, 18],
+                iconAnchor: [9, 18],
+            }),
+        });
+        marker.bindTooltip(self.esc(bm.name), {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -18],
+            className: 'gc-bm-tooltip',
+        });
+        var popupHtml = '<div class="gc-marker-popup">' +
+            '<div class="gc-mp-title" style="color:' + bm.color + '">📌 ' + self.esc(bm.name) + '</div>' +
+            '<div class="gc-mp-coord">' + bm.lat.toFixed(6) + ', ' + bm.lng.toFixed(6) + '</div>' +
+            '<div class="gc-mp-actions">' +
+            '<button class="gc-btn gc-btn-sm" onclick="window.plugin.getCoordinates.copyToClipboard(\'' + bm.lat.toFixed(6) + ', ' + bm.lng.toFixed(6) + '\')">📋 复制</button>' +
+            '<button class="gc-btn gc-btn-sm gc-btn-danger" onclick="window.plugin.getCoordinates.removeBookmark(\'' + bm.id + '\')">🗑️ 删除</button>' +
+            '</div></div>';
+        marker.bindPopup(popupHtml, { className: 'gc-popup-wrap', maxWidth: 280 });
+        self.bookmarkLayerGroup.addLayer(marker);
+        self.bookmarkMapMarkers[bm.id] = marker;
+    };
+
+    self.renderAllBookmarks = function () {
+        self.bookmarkLayerGroup.clearLayers();
+        self.bookmarkMapMarkers = {};
+        self.bookmarks.forEach(function (bm) {
+            self.renderBookmarkOnMap(bm);
+        });
+    };
+
+    self.promptAddBookmark = function (lat, lng, defaultName) {
+        var colorOpts = '';
+        self.MARKER_COLORS.forEach(function (c, i) {
+            colorOpts += '<label class="gc-color-opt"><input type="radio" name="gc-bm-color" value="' + c.value + '"' + (i === 0 ? ' checked' : '') + '><span class="gc-color-dot" style="background:' + c.value + '" title="' + c.name + '"></span></label>';
+        });
+        var html = '<div class="gc-bm-form">' +
+            '<div class="gc-bm-form-row"><label>名称</label><input type="text" id="gc-bm-name" class="gc-input" value="' + self.esc(defaultName || '') + '" placeholder="输入标记名称..."></div>' +
+            '<div class="gc-bm-form-row"><label>坐标</label><span class="gc-bm-form-coord">' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '</span></div>' +
+            '<div class="gc-bm-form-row"><label>颜色</label><div class="gc-color-picker">' + colorOpts + '</div></div>' +
+            '<div class="gc-bm-form-actions"><button id="gc-bm-save" class="gc-btn gc-btn-primary">📌 保存标记</button></div>' +
+            '</div>';
+        dialog({ html: html, title: '📌 添加标记', width: 320, dialogClass: 'gc-dialog' });
+        setTimeout(function () {
+            var saveBtn = document.getElementById('gc-bm-save');
+            if (saveBtn) saveBtn.addEventListener('click', function () {
+                var nameInput = document.getElementById('gc-bm-name');
+                var name = (nameInput && nameInput.value.trim()) || '标记';
+                var colorEl = document.querySelector('input[name=gc-bm-color]:checked');
+                var color = colorEl ? colorEl.value : '#e74c3c';
+                self.addBookmark(lat, lng, name, color);
+            });
+            // Focus name input
+            var nameInput = document.getElementById('gc-bm-name');
+            if (nameInput) nameInput.focus();
+        }, 50);
+    };
+
     // ── Result Display ────────────────────────────────────────
     self.showCoordinateResult = function (lat, lng, source) {
+        self._lastPickedLat = lat;
+        self._lastPickedLng = lng;
+        self._lastPickedSource = source || '';
         const resultEl = document.getElementById('gc-result');
         if (!resultEl) return;
 
@@ -230,6 +363,9 @@ function wrapper(plugin_info) {
             <span class="gc-fmt-val gc-fmt-link" data-copy="${self.formatCoords(lat, lng, 'google-maps')}">🔗 Google Maps</span>
           </div>
         </div>
+        <div class="gc-result-actions">
+          <button id="gc-save-bookmark-btn" class="gc-btn gc-btn-bookmark">📌 添加标记</button>
+        </div>
       </div>
     `;
 
@@ -240,11 +376,20 @@ function wrapper(plugin_info) {
                 self.copyToClipboard(this.dataset.copy);
             });
         });
+
+        // Bind save bookmark button
+        var bmBtn = document.getElementById('gc-save-bookmark-btn');
+        if (bmBtn) bmBtn.addEventListener('click', function () {
+            self.promptAddBookmark(lat, lng, source === '地图选取' ? '' : source);
+        });
     };
 
     // ── Map Center Coordinates ────────────────────────────────
     self.getMapCenter = function () {
         const center = map.getCenter();
+        self._lastPickedLat = center.lat;
+        self._lastPickedLng = center.lng;
+        self._lastPickedSource = '地图中心';
         self.showCoordinateResult(center.lat, center.lng, '地图中心');
         self.addToHistory(center.lat, center.lng, '地图中心');
         self.placeMarker(center.lat, center.lng);
@@ -374,6 +519,51 @@ function wrapper(plugin_info) {
         return d.innerHTML;
     };
 
+    // ── Bookmarks UI ─────────────────────────────────────────
+    self.updateBookmarksUI = function () {
+        var el = document.getElementById('gc-bookmarks-list');
+        if (!el) return;
+        if (!self.bookmarks.length) {
+            el.innerHTML = '<div class="gc-empty">暂无标记</div>';
+            return;
+        }
+        var html = '';
+        self.bookmarks.forEach(function (bm) {
+            html += '<div class="gc-bm-item">' +
+                '<div class="gc-bm-item-main">' +
+                '<span class="gc-bm-color-dot" style="background:' + bm.color + '"></span>' +
+                '<span class="gc-bm-item-name">' + self.esc(bm.name) + '</span>' +
+                '<span class="gc-bm-item-coord">' + bm.lat.toFixed(6) + ', ' + bm.lng.toFixed(6) + '</span>' +
+                '</div>' +
+                '<div class="gc-bm-item-actions">' +
+                '<button class="gc-btn gc-btn-xs" data-bm-action="goto" data-bm-id="' + bm.id + '" data-lat="' + bm.lat + '" data-lng="' + bm.lng + '" title="定位">🎯</button>' +
+                '<button class="gc-btn gc-btn-xs" data-bm-action="copy" data-lat="' + bm.lat + '" data-lng="' + bm.lng + '" title="复制">📋</button>' +
+                '<button class="gc-btn gc-btn-xs" data-bm-action="del" data-bm-id="' + bm.id + '" title="删除">🗑️</button>' +
+                '</div>' +
+                '</div>';
+        });
+        el.innerHTML = html;
+
+        el.querySelectorAll('[data-bm-action="goto"]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                map.setView(L.latLng(parseFloat(this.dataset.lat), parseFloat(this.dataset.lng)), 17);
+            });
+        });
+        el.querySelectorAll('[data-bm-action="copy"]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                self.copyToClipboard(this.dataset.lat + ', ' + this.dataset.lng);
+            });
+        });
+        el.querySelectorAll('[data-bm-action="del"]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                self.removeBookmark(this.dataset.bmId);
+            });
+        });
+    };
+
     // ── Dialog ────────────────────────────────────────────────
     self.openDialog = function () {
         const html = `
@@ -405,6 +595,17 @@ function wrapper(plugin_info) {
           <div class="gc-cursor-bar">
             <span class="gc-cursor-label">🖱️ 光标</span>
             <span id="gc-cursor-coords" class="gc-cursor-val">--, --</span>
+          </div>
+        </div>
+
+        <div class="gc-sec">
+          <div class="gc-sec-title">📌 已保存标记 <span id="gc-bm-count" class="gc-count-badge">${self.bookmarks.length}</span></div>
+          <div id="gc-bookmarks-list" class="gc-bookmarks-list">
+            <div class="gc-empty">暂无标记</div>
+          </div>
+          <div class="gc-action-row">
+            <button id="gc-add-bm-manual" class="gc-btn gc-btn-sm">📌 手动添加标记</button>
+            <button id="gc-clear-bm" class="gc-btn gc-btn-danger gc-btn-sm">🗑️ 清除全部</button>
           </div>
         </div>
 
@@ -459,8 +660,32 @@ function wrapper(plugin_info) {
             // Cursor tracking
             map.on('mousemove', self.updateCursorCoords);
 
-            // Update history UI
+            // Manual add bookmark
+            var addBmBtn = document.getElementById('gc-add-bm-manual');
+            if (addBmBtn) addBmBtn.addEventListener('click', function () {
+                if (self._lastPickedLat !== null) {
+                    self.promptAddBookmark(self._lastPickedLat, self._lastPickedLng, self._lastPickedSource === '地图选取' ? '' : self._lastPickedSource);
+                } else {
+                    // Use map center
+                    var c = map.getCenter();
+                    self.promptAddBookmark(c.lat, c.lng, '');
+                }
+            });
+
+            // Clear bookmarks
+            var clearBmBtn = document.getElementById('gc-clear-bm');
+            if (clearBmBtn) clearBmBtn.addEventListener('click', function () {
+                if (!confirm('确定清除所有标记？')) return;
+                self.bookmarks = [];
+                self.saveBookmarks();
+                self.bookmarkLayerGroup.clearLayers();
+                self.bookmarkMapMarkers = {};
+                self.updateBookmarksUI();
+            });
+
+            // Update history & bookmarks UI
             self.updateHistoryUI();
+            self.updateBookmarksUI();
         }, 100);
     };
 
@@ -533,6 +758,42 @@ function wrapper(plugin_info) {
 
 .gc-empty{text-align:center;color:#3a5070;padding:12px;font-style:italic;font-size:11px}
 
+/* ── Result actions ────────────────────────────────── */
+.gc-result-actions{margin-top:8px;padding-top:6px;border-top:1px solid #ffffff08}
+.gc-btn-bookmark{background:linear-gradient(135deg,#2d1b4e,#4c1d95)!important;border-color:#a78bfa40!important;color:#c4b5fd!important;width:100%;justify-content:center}
+.gc-btn-bookmark:hover{border-color:#a78bfa!important;box-shadow:0 0 10px #a78bfa30!important}
+
+/* ── Bookmarks list ────────────────────────────────── */
+.gc-bookmarks-list{max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#2a3f5a transparent}
+.gc-bm-item{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-bottom:1px solid #ffffff06;transition:background .15s}
+.gc-bm-item:hover{background:#ffffff06}
+.gc-bm-item-main{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.gc-bm-color-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.gc-bm-item-name{font-size:11px;color:#c0d0e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px}
+.gc-bm-item-coord{font-size:10px;font-family:'SF Mono',Consolas,Monaco,monospace;color:#5a7a94}
+.gc-bm-item-actions{display:flex;gap:2px;flex-shrink:0}
+.gc-count-badge{font-size:10px;color:#5bbcf2;background:#5bbcf215;padding:0 5px;border-radius:8px;margin-left:4px}
+
+/* ── Bookmark form ─────────────────────────────────── */
+.gc-bm-form{padding:14px;font-family:'Segoe UI',system-ui,sans-serif;color:#c0d0e0;font-size:12px}
+.gc-bm-form-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.gc-bm-form-row label{min-width:36px;font-size:11px;color:#5a7a94;font-weight:600}
+.gc-bm-form-coord{font-size:12px;font-family:'SF Mono',Consolas,Monaco,monospace;color:#8ecae6}
+.gc-color-picker{display:flex;gap:6px;flex-wrap:wrap}
+.gc-color-opt{cursor:pointer;display:flex;align-items:center}
+.gc-color-opt input{display:none}
+.gc-color-dot{width:18px;height:18px;border-radius:50%;border:2px solid transparent;transition:all .15s;cursor:pointer}
+.gc-color-opt input:checked+.gc-color-dot{border-color:#fff;transform:scale(1.2);box-shadow:0 0 8px rgba(255,255,255,.3)}
+.gc-color-opt:hover .gc-color-dot{transform:scale(1.15)}
+.gc-bm-form-actions{margin-top:12px}
+
+/* ── Bookmark map marker ──────────────────────────── */
+.gc-bm-icon{background:none!important;border:none!important}
+.gc-bm-pin{width:14px;height:14px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid;display:flex;align-items:center;justify-content:center}
+.gc-bm-dot{width:4px;height:4px;background:#fff;border-radius:50%;transform:rotate(45deg)}
+.gc-bm-tooltip{background:linear-gradient(135deg,#1a2a3e,#0d1a2a)!important;border:1px solid #5bbcf230!important;border-radius:4px!important;color:#d0e0f0!important;font-size:10px!important;padding:2px 6px!important;box-shadow:0 2px 8px rgba(0,0,0,.3)!important}
+.gc-bm-tooltip::before{border-top-color:#1a2a3e!important}
+
 /* ── Map Marker ───────────────────────────────────── */
 .gc-marker-icon{background:none!important;border:none!important}
 .gc-marker-pin{font-size:24px;text-shadow:0 2px 4px rgba(0,0,0,.5);animation:gc-drop .3s ease-out}
@@ -586,7 +847,10 @@ function wrapper(plugin_info) {
         self.injectStyles();
 
         self.layerGroup = new L.LayerGroup();
-        window.addLayerGroup('📍 坐标标记', self.layerGroup, true);
+        window.addLayerGroup('📍 坐标选取', self.layerGroup, true);
+
+        self.bookmarkLayerGroup = new L.LayerGroup();
+        window.addLayerGroup('📌 保存标记', self.bookmarkLayerGroup, true);
 
         // Try adding toolbox link immediately; if failed, retry with polling
         if (!self.addToolboxLink()) {
@@ -611,10 +875,14 @@ function wrapper(plugin_info) {
             }
         });
 
-        // Load history
+        // Load history & bookmarks
         self.loadHistory();
+        self.loadBookmarks();
+        if (self.bookmarks.length > 0) {
+            setTimeout(function () { self.renderAllBookmarks(); }, 2000);
+        }
 
-        console.log('[GetCoords] v1.0 loaded');
+        console.log('[GetCoords] v1.1 loaded');
     };
 
     // ── Standard IITC bootstrap ────────────────────────────────

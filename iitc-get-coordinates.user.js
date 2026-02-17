@@ -38,6 +38,7 @@ function wrapper(plugin_info) {
     self._lastPickedSource = '';
 
     self.settings = {
+        showMarkers: true,
         showCircles: true,
         showLabels: true,
     };
@@ -314,7 +315,9 @@ function wrapper(plugin_info) {
             '<button class="gc-btn gc-btn-sm gc-btn-danger" onclick="window.plugin.getCoordinates.removeBookmark(\'' + bm.id + '\')">🗑️ 删除</button>' +
             '</div></div>';
         marker.bindPopup(popupHtml, { className: 'gc-popup-wrap', maxWidth: 280 });
-        self.bookmarkLayerGroup.addLayer(marker);
+        if (self.settings.showMarkers) {
+            self.bookmarkLayerGroup.addLayer(marker);
+        }
         self.bookmarkMapMarkers[bm.id] = marker;
 
         // Draw 20m radius circle
@@ -645,6 +648,7 @@ function wrapper(plugin_info) {
           <div class="gc-sec-title">
             📌 已保存标记 <span id="gc-bm-count" class="gc-count-badge">${self.bookmarks.length}</span>
             <div style="float:right;display:flex;gap:8px">
+              <label class="gc-bm-opt"><input type="checkbox" id="gc-bm-show-markers" ${self.settings.showMarkers ? 'checked' : ''}> 标记</label>
               <label class="gc-bm-opt"><input type="checkbox" id="gc-bm-show-circles" ${self.settings.showCircles ? 'checked' : ''}> 20m圆</label>
               <label class="gc-bm-opt"><input type="checkbox" id="gc-bm-show-labels" ${self.settings.showLabels ? 'checked' : ''}> 标题</label>
             </div>
@@ -743,6 +747,19 @@ function wrapper(plugin_info) {
                     else self.bookmarkLayerGroup.removeLayer(circle);
                 });
             });
+
+            // Toggle markers
+            var markersToggle = document.getElementById('gc-bm-show-markers');
+            if (markersToggle) markersToggle.addEventListener('change', function () {
+                self.settings.showMarkers = this.checked;
+                self.saveSettings();
+                Object.values(self.bookmarkMapMarkers).forEach(function (marker) {
+                    if (self.settings.showMarkers) self.bookmarkLayerGroup.addLayer(marker);
+                    else self.bookmarkLayerGroup.removeLayer(marker);
+                });
+            });
+
+            // Toggle labels
 
             // Toggle labels
             var labelToggle = document.getElementById('gc-bm-show-labels');

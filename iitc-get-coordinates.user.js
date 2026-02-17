@@ -22,18 +22,25 @@ function wrapper(plugin_info) {
     // ── State ──────────────────────────────────────────────────
     self.STORAGE_KEY = 'plugin-get-coordinates-history';
     self.BOOKMARKS_KEY = 'plugin-get-coordinates-bookmarks';
+    self.SETTINGS_KEY = 'plugin-get-coordinates-settings';
     self.isPickMode = false;
     self.pickMarker = null;
     self.historyMarkers = [];
     self.layerGroup = null;
     self.bookmarkLayerGroup = null;
     self.bookmarkMapMarkers = {}; // id -> L.marker
+    self.bookmarkMapCircles = {}; // id -> L.circle
     self.history = [];
     self.bookmarks = [];
     self.MAX_HISTORY = 50;
     self._lastPickedLat = null;
     self._lastPickedLng = null;
     self._lastPickedSource = '';
+
+    self.settings = {
+        showCircles: true,
+        showLabels: true,
+    };
 
     self.MARKER_COLORS = [
         { name: '红色', value: '#e74c3c' },
@@ -220,6 +227,19 @@ function wrapper(plugin_info) {
         return false;
     };
 
+    self.saveSettings = function () {
+        try {
+            localStorage.setItem(self.SETTINGS_KEY, JSON.stringify(self.settings));
+        } catch (e) { console.warn('[GetCoords] Settings save failed', e); }
+    };
+
+    self.loadSettings = function () {
+        try {
+            const s = localStorage.getItem(self.SETTINGS_KEY);
+            if (s) self.settings = Object.assign({}, self.settings, JSON.parse(s));
+        } catch (e) { console.warn('[GetCoords] Settings load failed', e); }
+    };
+
     // ── Bookmarks (Saved Markers) ─────────────────────────────
     self.saveBookmarks = function () {
         try {
@@ -256,10 +276,14 @@ function wrapper(plugin_info) {
     self.removeBookmark = function (id) {
         self.bookmarks = self.bookmarks.filter(function (b) { return b.id !== id; });
         self.saveBookmarks();
-        // Remove from map
+        // Remove marker and circle from map
         if (self.bookmarkMapMarkers[id]) {
             self.bookmarkLayerGroup.removeLayer(self.bookmarkMapMarkers[id]);
             delete self.bookmarkMapMarkers[id];
+        }
+        if (self.bookmarkMapCircles[id]) {
+            self.bookmarkLayerGroup.removeLayer(self.bookmarkMapCircles[id]);
+            delete self.bookmarkMapCircles[id];
         }
         self.updateBookmarksUI();
     };
@@ -271,15 +295,15 @@ function wrapper(plugin_info) {
         var marker = L.marker(L.latLng(bm.lat, bm.lng), {
             icon: L.divIcon({
                 className: 'gc-bm-icon',
-                html: '<div class="gc-bm-pin" style="background:' + bm.color + ';border-color:' + bm.color + '"><span class="gc-bm-dot"></span></div>',
-                iconSize: [18, 18],
-                iconAnchor: [9, 18],
+                html: '<div class="gc-bm-dot-marker" style="background:' + bm.color + '"></div>',
+                iconSize: [12, 12],
+                iconAnchor: [6, 6],
             }),
         });
         marker.bindTooltip(self.esc(bm.name), {
-            permanent: true,
-            direction: 'top',
-            offset: [0, -18],
+            permanent: self.settings.showLabels,
+            direction: 'right',
+            offset: [8, 0],
             className: 'gc-bm-tooltip',
         });
         var popupHtml = '<div class="gc-marker-popup">' +
@@ -292,11 +316,30 @@ function wrapper(plugin_info) {
         marker.bindPopup(popupHtml, { className: 'gc-popup-wrap', maxWidth: 280 });
         self.bookmarkLayerGroup.addLayer(marker);
         self.bookmarkMapMarkers[bm.id] = marker;
+
+        // Draw 20m radius circle
+        if (self.bookmarkMapCircles[bm.id]) {
+            self.bookmarkLayerGroup.removeLayer(self.bookmarkMapCircles[bm.id]);
+        }
+        var circle = L.circle(L.latLng(bm.lat, bm.lng), {
+            radius: 20,
+            color: '#000000',
+            weight: 1,
+            opacity: 0.9,
+            fillColor: bm.color,
+            fillOpacity: 0.35,
+            interactive: false,
+        });
+        if (self.settings.showCircles) {
+            self.bookmarkLayerGroup.addLayer(circle);
+        }
+        self.bookmarkMapCircles[bm.id] = circle;
     };
 
     self.renderAllBookmarks = function () {
         self.bookmarkLayerGroup.clearLayers();
         self.bookmarkMapMarkers = {};
+        self.bookmarkMapCircles = {};
         self.bookmarks.forEach(function (bm) {
             self.renderBookmarkOnMap(bm);
         });
@@ -599,7 +642,13 @@ function wrapper(plugin_info) {
         </div>
 
         <div class="gc-sec">
-          <div class="gc-sec-title">📌 已保存标记 <span id="gc-bm-count" class="gc-count-badge">${self.bookmarks.length}</span></div>
+          <div class="gc-sec-title">
+            📌 已保存标记 <span id="gc-bm-count" class="gc-count-badge">${self.bookmarks.length}</span>
+            <div style="float:right;display:flex;gap:8px">
+              <label class="gc-bm-opt"><input type="checkbox" id="gc-bm-show-circles" ${self.settings.showCircles ? 'checked' : ''}> 20m圆</label>
+              <label class="gc-bm-opt"><input type="checkbox" id="gc-bm-show-labels" ${self.settings.showLabels ? 'checked' : ''}> 标题</label>
+            </div>
+          </div>
           <div id="gc-bookmarks-list" class="gc-bookmarks-list">
             <div class="gc-empty">暂无标记</div>
           </div>
@@ -680,7 +729,38 @@ function wrapper(plugin_info) {
                 self.saveBookmarks();
                 self.bookmarkLayerGroup.clearLayers();
                 self.bookmarkMapMarkers = {};
+                self.bookmarkMapCircles = {};
                 self.updateBookmarksUI();
+            });
+
+            // Toggle circles
+            var circleToggle = document.getElementById('gc-bm-show-circles');
+            if (circleToggle) circleToggle.addEventListener('change', function () {
+                self.settings.showCircles = this.checked;
+                self.saveSettings();
+                Object.values(self.bookmarkMapCircles).forEach(function (circle) {
+                    if (self.settings.showCircles) self.bookmarkLayerGroup.addLayer(circle);
+                    else self.bookmarkLayerGroup.removeLayer(circle);
+                });
+            });
+
+            // Toggle labels
+            var labelToggle = document.getElementById('gc-bm-show-labels');
+            if (labelToggle) labelToggle.addEventListener('change', function () {
+                self.settings.showLabels = this.checked;
+                self.saveSettings();
+                self.bookmarks.forEach(function (bm) {
+                    var marker = self.bookmarkMapMarkers[bm.id];
+                    if (marker) {
+                        marker.unbindTooltip();
+                        marker.bindTooltip(self.esc(bm.name), {
+                            permanent: self.settings.showLabels,
+                            direction: 'right',
+                            offset: [8, 0],
+                            className: 'gc-bm-tooltip',
+                        });
+                    }
+                });
             });
 
             // Update history & bookmarks UI
@@ -773,6 +853,8 @@ function wrapper(plugin_info) {
 .gc-bm-item-coord{font-size:10px;font-family:'SF Mono',Consolas,Monaco,monospace;color:#5a7a94}
 .gc-bm-item-actions{display:flex;gap:2px;flex-shrink:0}
 .gc-count-badge{font-size:10px;color:#5bbcf2;background:#5bbcf215;padding:0 5px;border-radius:8px;margin-left:4px}
+.gc-bm-opt{font-size:10px;font-weight:400;color:#888;cursor:pointer;display:flex;align-items:center;gap:3px}
+.gc-bm-opt input{margin:0;vertical-align:middle}
 
 /* ── Bookmark form ─────────────────────────────────── */
 .gc-bm-form{padding:14px;font-family:'Segoe UI',system-ui,sans-serif;color:#c0d0e0;font-size:12px}
@@ -789,10 +871,9 @@ function wrapper(plugin_info) {
 
 /* ── Bookmark map marker ──────────────────────────── */
 .gc-bm-icon{background:none!important;border:none!important}
-.gc-bm-pin{width:14px;height:14px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid;display:flex;align-items:center;justify-content:center}
-.gc-bm-dot{width:4px;height:4px;background:#fff;border-radius:50%;transform:rotate(45deg)}
-.gc-bm-tooltip{background:linear-gradient(135deg,#1a2a3e,#0d1a2a)!important;border:1px solid #5bbcf230!important;border-radius:4px!important;color:#d0e0f0!important;font-size:10px!important;padding:2px 6px!important;box-shadow:0 2px 8px rgba(0,0,0,.3)!important}
-.gc-bm-tooltip::before{border-top-color:#1a2a3e!important}
+.gc-bm-dot-marker{width:12px;height:12px;border-radius:50%;border:1px solid #000;box-shadow:0 0 2px rgba(0,0,0,0.5)}
+.gc-bm-tooltip{background:rgba(0,0,0,0.7)!important;border:none!important;border-radius:4px!important;color:#fff!important;font-size:10px!important;padding:2px 5px!important;box-shadow:none!important}
+.gc-bm-tooltip::before{display:none!important}
 
 /* ── Map Marker ───────────────────────────────────── */
 .gc-marker-icon{background:none!important;border:none!important}
@@ -875,9 +956,10 @@ function wrapper(plugin_info) {
             }
         });
 
-        // Load history & bookmarks
+        // Load history & bookmarks & settings
         self.loadHistory();
         self.loadBookmarks();
+        self.loadSettings();
         if (self.bookmarks.length > 0) {
             setTimeout(function () { self.renderAllBookmarks(); }, 2000);
         }

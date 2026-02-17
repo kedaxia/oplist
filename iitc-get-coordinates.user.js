@@ -20,19 +20,17 @@ function wrapper(plugin_info) {
     const self = window.plugin.getCoordinates;
 
     // ── State ──────────────────────────────────────────────────
-    self.STORAGE_KEY = 'plugin-get-coordinates-history';
+
     self.BOOKMARKS_KEY = 'plugin-get-coordinates-bookmarks';
     self.SETTINGS_KEY = 'plugin-get-coordinates-settings';
     self.isPickMode = false;
     self.pickMarker = null;
-    self.historyMarkers = [];
+
     self.layerGroup = null;
     self.bookmarkLayerGroup = null;
     self.bookmarkMapMarkers = {}; // id -> L.marker
     self.bookmarkMapCircles = {}; // id -> L.circle
-    self.history = [];
     self.bookmarks = [];
-    self.MAX_HISTORY = 50;
     self._lastPickedLat = null;
     self._lastPickedLng = null;
     self._lastPickedSource = '';
@@ -167,7 +165,7 @@ function wrapper(plugin_info) {
         self._lastPickedLng = lng;
         self._lastPickedSource = '地图选取';
         self.showCoordinateResult(lat, lng, '地图选取');
-        self.addToHistory(lat, lng, '地图选取');
+
         self.placeMarker(lat, lng);
         self.exitPickMode();
     };
@@ -201,32 +199,8 @@ function wrapper(plugin_info) {
         self.pickMarker.openPopup();
     };
 
-    // ── History ───────────────────────────────────────────────
-    self.addToHistory = function (lat, lng, source) {
-        self.history.unshift({
-            lat, lng, source,
-            time: new Date().toLocaleString('zh-CN', { hour12: false }),
-        });
-        if (self.history.length > self.MAX_HISTORY) {
-            self.history = self.history.slice(0, self.MAX_HISTORY);
-        }
-        self.saveHistory();
-        self.updateHistoryUI();
-    };
 
-    self.saveHistory = function () {
-        try {
-            localStorage.setItem(self.STORAGE_KEY, JSON.stringify(self.history));
-        } catch (e) { console.warn('[GetCoords] Save failed', e); }
-    };
 
-    self.loadHistory = function () {
-        try {
-            const s = localStorage.getItem(self.STORAGE_KEY);
-            if (s) { self.history = JSON.parse(s); return true; }
-        } catch (e) { console.warn('[GetCoords] Load failed', e); }
-        return false;
-    };
 
     self.saveSettings = function () {
         try {
@@ -409,7 +383,7 @@ function wrapper(plugin_info) {
         });
         var html = '<div class="gc-bm-form">' +
             '<div class="gc-bm-form-row"><label>名称</label><input type="text" id="gc-bm-name" class="gc-input" value="' + self.esc(defaultName || '') + '" placeholder="输入标记名称..."></div>' +
-            '<div class="gc-bm-form-row"><label>坐标</label><span class="gc-bm-form-coord">' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '</span></div>' +
+            '<div class="gc-bm-form-row"><label>坐标</label><input type="text" id="gc-bm-coord" class="gc-input" value="' + lat.toFixed(6) + ', ' + lng.toFixed(6) + '" placeholder="如: 25.033, 121.565"></div>' +
             '<div class="gc-bm-form-row"><label>颜色</label><div class="gc-color-picker">' + colorOpts + '</div></div>' +
             '<div class="gc-bm-form-actions"><button id="gc-bm-save" class="gc-btn gc-btn-primary">📌 保存标记</button></div>' +
             '</div>';
@@ -419,9 +393,13 @@ function wrapper(plugin_info) {
             if (saveBtn) saveBtn.addEventListener('click', function () {
                 var nameInput = document.getElementById('gc-bm-name');
                 var name = (nameInput && nameInput.value.trim()) || '标记';
+                var coordInput = document.getElementById('gc-bm-coord');
+                var coordText = coordInput ? coordInput.value.trim() : '';
+                var parsed = self.parseCoordInput(coordText);
+                if (!parsed) { self.showToast('⚠️ 坐标格式错误'); return; }
                 var colorEl = document.querySelector('input[name=gc-bm-color]:checked');
                 var color = colorEl ? colorEl.value : '#e74c3c';
-                self.addBookmark(lat, lng, name, color);
+                self.addBookmark(parsed.lat, parsed.lng, name, color);
             });
             // Focus name input
             var nameInput = document.getElementById('gc-bm-name');
@@ -491,7 +469,7 @@ function wrapper(plugin_info) {
         self._lastPickedLng = center.lng;
         self._lastPickedSource = '地图中心';
         self.showCoordinateResult(center.lat, center.lng, '地图中心');
-        self.addToHistory(center.lat, center.lng, '地图中心');
+
         self.placeMarker(center.lat, center.lng);
     };
 
@@ -518,7 +496,7 @@ function wrapper(plugin_info) {
         const ll = p.getLatLng();
         const title = p.options.data.title || 'Unknown Portal';
         self.showCoordinateResult(ll.lat, ll.lng, 'Portal: ' + title);
-        self.addToHistory(ll.lat, ll.lng, title);
+
     };
 
     // ── Coordinate Input Search ───────────────────────────────
@@ -536,7 +514,7 @@ function wrapper(plugin_info) {
         }
         map.setView(L.latLng(result.lat, result.lng), 17);
         self.showCoordinateResult(result.lat, result.lng, '搜索定位');
-        self.addToHistory(result.lat, result.lng, '搜索定位');
+
         self.placeMarker(result.lat, result.lng);
     };
 
@@ -566,51 +544,8 @@ function wrapper(plugin_info) {
         return null;
     };
 
-    // ── History UI ────────────────────────────────────────────
-    self.updateHistoryUI = function () {
-        const el = document.getElementById('gc-history-list');
-        if (!el) return;
-        if (!self.history.length) {
-            el.innerHTML = '<div class="gc-empty">暂无记录</div>';
-            return;
-        }
-        let html = '';
-        self.history.slice(0, 20).forEach(function (h, i) {
-            html += `
-        <div class="gc-hist-item" data-idx="${i}">
-          <div class="gc-hist-main">
-            <span class="gc-hist-source">${self.esc(h.source)}</span>
-            <span class="gc-hist-coord">${h.lat.toFixed(6)}, ${h.lng.toFixed(6)}</span>
-          </div>
-          <div class="gc-hist-meta">
-            <span class="gc-hist-time">${h.time}</span>
-            <span class="gc-hist-actions">
-              <button class="gc-btn gc-btn-xs" data-action="copy" data-lat="${h.lat}" data-lng="${h.lng}" title="复制">📋</button>
-              <button class="gc-btn gc-btn-xs" data-action="goto" data-lat="${h.lat}" data-lng="${h.lng}" title="定位">🎯</button>
-            </span>
-          </div>
-        </div>
-      `;
-        });
-        el.innerHTML = html;
 
-        // Bind events
-        el.querySelectorAll('[data-action="copy"]').forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                self.copyToClipboard(this.dataset.lat + ', ' + this.dataset.lng);
-            });
-        });
-        el.querySelectorAll('[data-action="goto"]').forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                const lat = parseFloat(this.dataset.lat);
-                const lng = parseFloat(this.dataset.lng);
-                map.setView(L.latLng(lat, lng), 17);
-                self.placeMarker(lat, lng);
-            });
-        });
-    };
+
 
     self.esc = function (s) {
         if (!s) return '';
@@ -719,15 +654,7 @@ function wrapper(plugin_info) {
           </div>
         </div>
 
-        <div class="gc-sec">
-          <div class="gc-sec-title">📜 历史记录</div>
-          <div id="gc-history-list" class="gc-history-list">
-            <div class="gc-empty">暂无记录</div>
-          </div>
-          <div class="gc-action-row">
-            <button id="gc-clear-history" class="gc-btn gc-btn-danger gc-btn-sm">🗑️ 清除历史</button>
-          </div>
-        </div>
+
       </div>
     `;
 
@@ -758,14 +685,7 @@ function wrapper(plugin_info) {
                 if (e.key === 'Enter') self.searchCoordinate();
             });
 
-            // Clear history
-            const clearBtn = document.getElementById('gc-clear-history');
-            if (clearBtn) clearBtn.addEventListener('click', function () {
-                if (!confirm('确定清除所有历史记录？')) return;
-                self.history = [];
-                self.saveHistory();
-                self.updateHistoryUI();
-            });
+
 
             // Cursor tracking
             map.on('mousemove', self.updateCursorCoords);
@@ -859,7 +779,7 @@ function wrapper(plugin_info) {
             });
 
             // Update history & bookmarks UI
-            self.updateHistoryUI();
+
             self.updateBookmarksUI();
         }, 100);
     };
@@ -920,16 +840,7 @@ function wrapper(plugin_info) {
 .gc-cursor-label{font-size:10px;color:#5a7a94}
 .gc-cursor-val{font-size:11px;font-family:'SF Mono',Consolas,Monaco,monospace;color:#8ecae6;letter-spacing:.3px}
 
-/* ── History ───────────────────────────────────────── */
-.gc-history-list{max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#2a3f5a transparent}
-.gc-hist-item{padding:6px 8px;border-bottom:1px solid #ffffff06;transition:background .15s}
-.gc-hist-item:hover{background:#ffffff06}
-.gc-hist-main{display:flex;align-items:baseline;gap:6px;margin-bottom:2px}
-.gc-hist-source{font-size:10px;color:#5bbcf2;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gc-hist-coord{font-size:11px;font-family:'SF Mono',Consolas,Monaco,monospace;color:#aac4dd}
-.gc-hist-meta{display:flex;align-items:center;justify-content:space-between}
-.gc-hist-time{font-size:9px;color:#3a5070}
-.gc-hist-actions{display:flex;gap:2px}
+
 
 .gc-empty{text-align:center;color:#3a5070;padding:12px;font-style:italic;font-size:11px}
 
@@ -1052,7 +963,7 @@ function wrapper(plugin_info) {
         });
 
         // Load history & bookmarks & settings
-        self.loadHistory();
+
         self.loadBookmarks();
         self.loadSettings();
         if (self.bookmarks.length > 0) {

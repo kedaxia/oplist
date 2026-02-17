@@ -256,6 +256,60 @@ function wrapper(plugin_info) {
         return false;
     };
 
+    self.exportBookmarks = function () {
+        if (!self.bookmarks.length) {
+            self.showToast('⚠️ 没有可导出的标记');
+            return;
+        }
+        const data = JSON.stringify(self.bookmarks, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'iitc-bookmarks-' + new Date().toISOString().slice(0, 19).replace(/[-T:]/g, '') + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        self.showToast('📤 已导出 ' + self.bookmarks.length + ' 个标记');
+    };
+
+    self.importBookmarks = function (file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (!Array.isArray(imported)) throw new Error('Invalid format');
+                let count = 0;
+                imported.forEach(function (bm) {
+                    if (bm.lat && bm.lng && bm.name) {
+                        // Avoid exact duplicates (same ID)
+                        if (!self.bookmarks.find(b => b.id === bm.id)) {
+                            self.bookmarks.push(bm);
+                            count++;
+                        } else {
+                            // If ID exists but content differs, maybe update? For now, skip or generate new ID?
+                            // Simple approach: if ID clash, generate new ID
+                            const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+                            bm.id = newId;
+                            self.bookmarks.push(bm);
+                            count++;
+                        }
+                    }
+                });
+                self.saveBookmarks();
+                self.renderAllBookmarks();
+                self.updateBookmarksUI();
+                self.showToast('📥 已导入 ' + count + ' 个标记');
+            } catch (err) {
+                console.warn('[GetCoords] Import failed', err);
+                self.showToast('⚠️ 导入失败: 文件格式错误');
+            }
+        };
+        reader.readAsText(file);
+    };
+
     self.addBookmark = function (lat, lng, name, color) {
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const bm = {
@@ -657,8 +711,11 @@ function wrapper(plugin_info) {
             <div class="gc-empty">暂无标记</div>
           </div>
           <div class="gc-action-row">
-            <button id="gc-add-bm-manual" class="gc-btn gc-btn-sm">📌 手动添加标记</button>
-            <button id="gc-clear-bm" class="gc-btn gc-btn-danger gc-btn-sm">🗑️ 清除全部</button>
+            <button id="gc-add-bm-manual" class="gc-btn gc-btn-sm">📌 手动添加</button>
+            <button id="gc-export-bm" class="gc-btn gc-btn-sm" title="导出标记为JSON文件">📤 导出</button>
+            <button id="gc-import-bm-btn" class="gc-btn gc-btn-sm" title="从JSON文件导入标记">📥 导入</button>
+            <input type="file" id="gc-import-bm-input" accept=".json" style="display:none">
+            <button id="gc-clear-bm" class="gc-btn gc-btn-danger gc-btn-sm" style="margin-left:auto">🗑️ 清除</button>
           </div>
         </div>
 
@@ -724,6 +781,27 @@ function wrapper(plugin_info) {
                     self.promptAddBookmark(c.lat, c.lng, '');
                 }
             });
+
+            // Export bookmarks
+            var exportBtn = document.getElementById('gc-export-bm');
+            if (exportBtn) exportBtn.addEventListener('click', function () {
+                self.exportBookmarks();
+            });
+
+            // Import bookmarks
+            var importBtn = document.getElementById('gc-import-bm-btn');
+            var importInput = document.getElementById('gc-import-bm-input');
+            if (importBtn && importInput) {
+                importBtn.addEventListener('click', function () {
+                    importInput.click();
+                });
+                importInput.addEventListener('change', function () {
+                    if (this.files.length) {
+                        self.importBookmarks(this.files[0]);
+                        this.value = ''; // Reset input
+                    }
+                });
+            }
 
             // Clear bookmarks
             var clearBmBtn = document.getElementById('gc-clear-bm');

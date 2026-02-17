@@ -378,6 +378,7 @@ function wrapper(plugin_info) {
             '<div class="gc-mp-coord">' + bm.lat.toFixed(6) + ', ' + bm.lng.toFixed(6) + '</div>' +
             '<div class="gc-mp-actions">' +
             '<button class="gc-btn gc-btn-sm" onclick="window.plugin.getCoordinates.copyToClipboard(\'' + bm.lat.toFixed(6) + ', ' + bm.lng.toFixed(6) + '\')">📋 复制</button>' +
+            '<button class="gc-btn gc-btn-sm" onclick="window.plugin.getCoordinates.editBookmark(\'' + bm.id + '\')">✏️ 编辑</button>' +
             '<button class="gc-btn gc-btn-sm gc-btn-danger" onclick="window.plugin.getCoordinates.removeBookmark(\'' + bm.id + '\')">🗑️ 删除</button>' +
             '</div></div>';
         marker.bindPopup(popupHtml, { className: 'gc-popup-wrap', maxWidth: 280 });
@@ -403,6 +404,54 @@ function wrapper(plugin_info) {
             self.bookmarkLayerGroup.addLayer(circle);
         }
         self.bookmarkMapCircles[bm.id] = circle;
+    };
+
+    self.editBookmark = function (id) {
+        var bm = self.bookmarks.find(function (b) { return b.id === id; });
+        if (!bm) { self.showToast('⚠️ 未找到标记'); return; }
+        var colorOpts = '';
+        self.MARKER_COLORS.forEach(function (c) {
+            colorOpts += '<label class="gc-color-opt"><input type="radio" name="gc-bm-color" value="' + c.value + '"' + (c.value === bm.color ? ' checked' : '') + '><span class="gc-color-dot" style="background:' + c.value + '" title="' + c.name + '"></span></label>';
+        });
+        var html = '<div class="gc-bm-form">' +
+            '<div class="gc-bm-form-row"><label>名称</label><input type="text" id="gc-bm-name" class="gc-input" value="' + self.esc(bm.name) + '" placeholder="输入标记名称..."></div>' +
+            '<div class="gc-bm-form-row"><label>坐标</label><input type="text" id="gc-bm-coord" class="gc-input" value="' + bm.lat.toFixed(6) + ', ' + bm.lng.toFixed(6) + '" placeholder="如: 25.033, 121.565"></div>' +
+            '<div class="gc-bm-form-row"><label>颜色</label><div class="gc-color-picker">' + colorOpts + '</div></div>' +
+            '<div class="gc-bm-form-actions">' +
+            '<button id="gc-bm-save" class="gc-btn gc-btn-primary">✅ 保存修改</button>' +
+            '<button id="gc-bm-del" class="gc-btn gc-btn-danger" style="margin-left:8px">🗑️ 删除</button>' +
+            '</div>' +
+            '</div>';
+        dialog({ html: html, title: '✏️ 编辑标记', width: 320, dialogClass: 'gc-dialog' });
+        setTimeout(function () {
+            var saveBtn = document.getElementById('gc-bm-save');
+            if (saveBtn) saveBtn.addEventListener('click', function () {
+                var nameInput = document.getElementById('gc-bm-name');
+                var name = (nameInput && nameInput.value.trim()) || '标记';
+                var coordInput = document.getElementById('gc-bm-coord');
+                var coordText = coordInput ? coordInput.value.trim() : '';
+                var parsed = self.parseCoordInput(coordText);
+                if (!parsed) { self.showToast('⚠️ 坐标格式错误'); return; }
+                var colorEl = document.querySelector('input[name=gc-bm-color]:checked');
+                var color = colorEl ? colorEl.value : bm.color;
+                bm.name = name;
+                bm.lat = parsed.lat;
+                bm.lng = parsed.lng;
+                bm.color = color;
+                self.saveBookmarks();
+                self.renderAllBookmarks();
+                self.updateBookmarksUI();
+                self.showToast('✅ 标记已更新: ' + name);
+            });
+            var delBtn = document.getElementById('gc-bm-del');
+            if (delBtn) delBtn.addEventListener('click', function () {
+                if (!confirm('确定删除此标记？')) return;
+                self.removeBookmark(id);
+                self.showToast('🗑️ 标记已删除');
+            });
+            var nameInput = document.getElementById('gc-bm-name');
+            if (nameInput) nameInput.focus();
+        }, 50);
     };
 
     self.renderAllBookmarks = function () {
@@ -611,6 +660,7 @@ function wrapper(plugin_info) {
                 '<div class="gc-bm-item-actions">' +
                 '<button class="gc-btn gc-btn-xs" data-bm-action="goto" data-bm-id="' + bm.id + '" data-lat="' + bm.lat + '" data-lng="' + bm.lng + '" title="定位">🎯</button>' +
                 '<button class="gc-btn gc-btn-xs" data-bm-action="copy" data-lat="' + bm.lat + '" data-lng="' + bm.lng + '" title="复制">📋</button>' +
+                '<button class="gc-btn gc-btn-xs" data-bm-action="edit" data-bm-id="' + bm.id + '" title="编辑">✏️</button>' +
                 '<button class="gc-btn gc-btn-xs" data-bm-action="del" data-bm-id="' + bm.id + '" title="删除">🗑️</button>' +
                 '</div>' +
                 '</div>';
@@ -627,6 +677,12 @@ function wrapper(plugin_info) {
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 self.copyToClipboard(this.dataset.lat + ', ' + this.dataset.lng);
+            });
+        });
+        el.querySelectorAll('[data-bm-action="edit"]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                self.editBookmark(this.dataset.bmId);
             });
         });
         el.querySelectorAll('[data-bm-action="del"]').forEach(function (btn) {

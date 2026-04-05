@@ -1,0 +1,18 @@
+# Claude Proxy Rules
+
+# Set proxy for Claude network traffic routing
+proxy_rules:
+  - rule: "ALLOW"
+    target: "Claude"
+    action: "ROUTE"
+    parameters:
+      method: "GET"
+      destination: "http://claude.proxy.server"
+      port: 8080
+
+# Additional CLAUDE Proxy Rules
+  - rule: "DENY"
+    target: "all"
+    action: "BLOCK"
+    parameters:
+      reason: "Non-Claude traffic"
